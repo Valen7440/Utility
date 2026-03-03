@@ -1,6 +1,6 @@
 # BallsDex Utility Cog
-An utility cog that add some commands and listeners.
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/valen7440)
+An utility cog that add some commands and listeners.
 
 > [!NOTE]
 > This package is only compatible with BallsDex 2.29.5 and above.
