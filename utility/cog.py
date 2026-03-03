@@ -1,5 +1,6 @@
+from datetime import datetime, timezone
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 import discord
 from discord import app_commands
@@ -7,11 +8,12 @@ from discord.ext import commands
 from discord.utils import format_dt
 
 from ballsdex.core.models import BallInstance, GuildConfig, Player, balls
-from ballsdex.core.broadcast_models import Broadcast
+from ballsdex.core.utility_models import Broadcast
 from ballsdex.core.utils.paginator import FieldPageSource, Pages, TextPageSource
 from ballsdex.settings import settings
 
 from .components import BroadcastSendModal
+from .types import PrisonData
 
 if TYPE_CHECKING:
     from ballsdex.core.bot import BallsDexBot                                                                                                                                                                                                   
@@ -47,10 +49,17 @@ class UtilityCog(commands.Cog):
 
     def __init__(self, bot: "BallsDexBot"):
         self.bot = bot
-
+        self.prison_data: dict[int, dict[int, PrisonData]] = {}
+    
     broadcast = app_commands.Group(
         name="broadcast",
         description="Send a global announcement to spawn channels.",
+        guild_only=True,
+        default_permissions=discord.Permissions(administrator=True)
+    )
+    prision = app_commands.Group(
+        name="prision",
+        description="Bot prision commands",
         guild_only=True,
         default_permissions=discord.Permissions(administrator=True)
     )
@@ -135,8 +144,8 @@ class UtilityCog(commands.Cog):
         await interaction.response.send_modal(BroadcastSendModal(self.bot, ids, file))
 
     @app_commands.command()
-    @app_commands.checks.has_any_role(*settings.root_role_ids, *settings.admin_role_ids)
     @app_commands.guilds(*settings.admin_guild_ids)
+    @app_commands.checks.has_any_role(*settings.root_role_ids, *settings.admin_role_ids)
     async def servers(self, interaction: discord.Interaction["BallsDexBot"]):
         """
         List all servers BallsDex is in
@@ -216,6 +225,141 @@ class UtilityCog(commands.Cog):
         
         pages = Pages(source, interaction=interaction, compact=True)
         await pages.start()
+
+    @prision.command()
+    async def set(
+        self, 
+        interaction: discord.Interaction["BallsDexBot"], 
+        user: discord.Member,
+        *,
+        reason: Optional[str] = None
+    ):
+        """
+        Sends a user to prison mode. Their messages will be automatically deleted.
+
+        Parameters
+        ----------
+        user: discord.Member
+            The user to send to prision.
+        reason: Optional[str]
+            The reason for sending the user to prison.
+        """
+        assert interaction.guild
+        if interaction.guild.unavailable:
+            await interaction.response.send_message(
+                "The server is unavailable to the bot and will not work properly. "
+                "Kicking and readding the bot may fix this.",
+                ephemeral=True,
+            )
+            return
+        assert isinstance(interaction.user, discord.Member)
+        if user.bot:
+            await interaction.response.send_message("You cannot send bots to prison.", ephemeral=True)
+            return
+        if user.id == interaction.user.id:
+            await interaction.response.send_message("You cannot prison yourself.", ephemeral=True)
+            return
+        if user.id == interaction.guild.owner_id:
+            await interaction.response.send_message("You cannot prison the server owner.", ephemeral=True)
+            return
+        if user.top_role.position >= interaction.user.top_role.position:
+            await interaction.response.send_message(
+                "You cannot prison someone with an equal or higher role.", ephemeral=True
+            )
+            return
+        guild_prison_data = self.prison_data.setdefault(interaction.guild.id, {})
+        if user.id in guild_prison_data:
+            await interaction.response.send_message(f"{user.mention} is already added to prison.")
+            return
+        guild_prison_data[user.id] = { # type: ignore
+            "id": len(guild_prison_data) + 1,
+            "guild": interaction.guild,
+            "moderator": interaction.user,
+            "user": user,
+            "reason": reason,
+            "since": datetime.now(timezone.utc)
+        }
+        text = (
+            f"{user.mention} has been sent to the cursed realm!\n"
+            f"Reason: {reason}"
+            if reason
+            else f"{user.mention} has been sent to the cursed realm!"
+        )
+    
+        await interaction.response.send_message(text)
+    
+    @prision.command()
+    async def unset(
+        self,
+        interaction: discord.Interaction["BallsDexBot"],
+        user: discord.Member
+    ):
+        """
+        Removes a user from prison mode.
+
+        Parameters
+        ----------
+        user: discord.Member
+            The user to remove from prision.
+        """
+        assert interaction.guild
+        if interaction.guild.unavailable:
+            await interaction.response.send_message(
+                "The server is unavailable to the bot and will not work properly. "
+                "Kicking and readding the bot may fix this.",
+                ephemeral=True,
+            )
+            return
+        guild_prison_data = self.prison_data.get(interaction.guild.id, {})
+        if user.id not in guild_prison_data:
+            await interaction.response.send_message(f"{user.mention} isn't in prision mode.")
+            return
+        guild_prison_data.pop(user.id)
+        await interaction.response.send_message(f"{user.mention} removed from prision mode.")
+        return
+    
+    @prision.command()
+    async def list(self, interaction: discord.Interaction["BallsDexBot"]):
+        """
+        List of users in prision mode.
+        """
+        assert interaction.guild
+        if interaction.guild.unavailable:
+            await interaction.response.send_message(
+                "The server is unavailable to the bot and will not work properly. "
+                "Kicking and readding the bot may fix this.",
+                ephemeral=True,
+            )
+            return
+        guild_prison_data = self.prison_data.get(interaction.guild.id, {})
+        if not guild_prison_data:
+            await interaction.response.send_message("There isn't any user in prision mode.", ephemeral=True)
+            return
+    
+        entries: list[tuple[str, str]] = []
+        for data in guild_prison_data.values():
+            text = (
+                f"User: {data["user"].display_name}\n"
+                f"Moderator: {data["moderator"].display_name}\n"
+                f"Since: {format_dt(data["since"])} ({format_dt(data["since"], "R")})\n"
+            )
+            if data["reason"]:
+                text += f"Reason: {data["reason"]}\n"
+            entries.append((f"Case #{data["id"]}", text))
+        source = FieldPageSource(entries, per_page=5)
+        source.embed.title = f"{interaction.guild.name}'s Prision"
+
+        pages = Pages(source, interaction=interaction)
+        await pages.start()
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        assert message.guild
+        guild_prison_data = self.prison_data.get(message.guild.id, {})
+        if message.author.id in guild_prison_data:
+            log.debug(f"{message.author.name}'s message was successfully deleted.")
+            await message.delete()
+            return
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):

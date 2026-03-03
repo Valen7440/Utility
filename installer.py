@@ -24,11 +24,12 @@ PACKAGE_PATH = "ballsdex/packages/utility"
 PACKAGE_FILES = [
     "__init__.py", 
     "cog.py",
-    "components.py"
+    "components.py",
+    "types.py"
 ]
-TORTOISE_MODELS = ["broadcast_models.py"]
+TORTOISE_MODELS = ["utility_models.py"]
 DJANGO_APP_FILES = {
-    "broadcast_app": [
+    "utility_app": [
         "__init__.py", 
         "apps.py", 
         "models.py", 
