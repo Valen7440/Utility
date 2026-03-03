@@ -30,7 +30,6 @@ TORTOISE_MODELS = ["broadcast_models.py"]
 DJANGO_APP_FILES = {
     "broadcast_app": [
         "__init__.py", 
-        "admin.py", 
         "apps.py", 
         "models.py", 
         "migrations/__init__.py", 
