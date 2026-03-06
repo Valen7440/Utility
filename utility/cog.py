@@ -182,16 +182,16 @@ class UtilityCog(commands.Cog):
                 countryballs = [
                     b
                     for b in balls.values()
-                    if b.pk in ball_ids
+                    if b.pk in ball_ids and b.enabled
                 ]
             else:
                 countryballs = [
                     b
                     for b in balls.values()
-                    if b.pk not in ball_ids
+                    if b.pk not in ball_ids and b.enabled
                 ]
         else:
-            countryballs = [b for b in balls.values()]
+            countryballs = [b for b in balls.values() if b.enabled]
         
         if not countryballs:
             if owned is not None:
@@ -218,7 +218,7 @@ class UtilityCog(commands.Cog):
             if emoji:
                 title = f"{emoji} {title}"
             
-            rarity_text = f"{countryball.rarity:.1f}%"
+            rarity_text = f"{countryball.rarity * 100:g}%"
             entries.append((title, f"Rarity: {rarity_text}"))
         source = FieldPageSource(entries, per_page=5)
         source.embed.title = f"{settings.bot_name} {settings.plural_collectible_name.title()} rarity list"
