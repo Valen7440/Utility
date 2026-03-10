@@ -38,8 +38,6 @@ DJANGO_APP_FILES = {
     ],
 }
 
-os.makedirs("ballsdex/packages/utility", exist_ok=True)
-
 async def fetch_github_file(session: aiohttp.ClientSession, url: str):
     async with session.get(url) as resp:
         if resp.status != 200:
@@ -210,9 +208,6 @@ async def install_django_app_files(app_name: str):
 await install_tortoise_models()
 await install_django_app_files("broadcast_app")
 await install_package_files()
-await add_package(PACKAGE_PATH.replace("/", "."))
-await add_model("ballsdex.core.broadcast_models", ModelType.TORTOISE)
-await add_model("broadcast_app", ModelType.DJANGO)
 
 await ctx.send("Reloading commands...")
 

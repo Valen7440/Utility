@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+import requests
+import base64
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional, cast
 
 import discord
@@ -166,12 +168,23 @@ class UtilityCog(commands.Cog):
         await pages.start(ephemeral=True)
 
     @app_commands.command()
-    async def rarity(self, interaction: discord.Interaction["BallsDexBot"], owned: bool | None = None):
+    @app_commands.choices(order=[
+        app_commands.Choice(name="Rarest", value=0),
+        app_commands.Choice(name="More Common", value=1),
+    ])
+    async def rarity(
+        self, 
+        interaction: discord.Interaction["BallsDexBot"], 
+        order: int = 1,
+        owned: bool | None = None,
+    ):
         """
-        Genereate a list of rarities of cards.
+        Genereate a list of rarities of countryballs.
 
         Parameters
         ----------
+        order: app_commands.Choice[int]
+            Order the list by rarest or more common countryballs.
         owned: bool | None
             Filters the list to only include the countryballs you own.
         """
@@ -208,7 +221,7 @@ class UtilityCog(commands.Cog):
             return
         
         entries: list[tuple[str, str]] = []
-        for countryball in countryballs:
+        for countryball in sorted(countryballs, key=lambda x: x.rarity, reverse=bool(order)):
             emoji = self.bot.get_emoji(countryball.emoji_id)
             if owned is not None:
                 title = f"{countryball.country} {'✅' if owned else '❌'}"
@@ -351,6 +364,38 @@ class UtilityCog(commands.Cog):
 
         pages = Pages(source, interaction=interaction)
         await pages.start()
+
+    @commands.hybrid_group()
+    @commands.has_permissions(administrator=True)
+    @commands.has_any_role(*settings.root_role_ids, *settings.admin_role_ids)
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_any_role(*settings.root_role_ids, *settings.admin_role_ids)
+    @app_commands.guilds(*settings.admin_guild_ids)
+    async def utility(self, ctx: commands.Context["BallsDexBot"]):
+        """
+        Utility commands.
+        """
+        await ctx.send_help(ctx.command)
+    
+    @utility.command()
+    async def update(self, ctx: commands.Context["BallsDexBot"]):
+        """
+        Update your Utility package.
+        """
+        link = "https://api.github.com/repos/Valen7440/Utility/contents/updater.py"
+        request = requests.get(link, {"ref": "master"})
+
+        match request.status_code:
+            case requests.codes.not_found:
+                await ctx.send("Could not find updater for the master branch.")
+
+            case requests.codes.ok:
+                content = requests.get(link, {"ref": "master"}).json()["content"]
+                await ctx.invoke(
+                    self.bot.get_command("eval"), body=base64.b64decode(content).decode() # type: ignore
+                )
+            case _:
+                await ctx.send(f"Request raised error code `{request.status_code}`.")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
